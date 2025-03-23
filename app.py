@@ -343,6 +343,24 @@ def get_random_dog():
         if subreddit_param and subreddit_param in DOG_SUBREDDITS:
             subreddit_to_use = subreddit_param
         else:
+            available_subreddits = []
+            with prefetch_lock:
+                available_subreddits = [s for s in DOG_SUBREDDITS if s in prefetched_images and prefetched_images[s]]
+            
+            if available_subreddits:
+                tier1_available = [s for s in available_subreddits if DOG_SUBREDDITS[s] == 1]
+                if tier1_available:
+                    subreddit_to_use = random.choice(tier1_available)
+                else:
+                    subreddit_to_use = random.choice(available_subreddits)
+                
+                logger.info(f"Using prefetched images from r/{subreddit_to_use}")
+                
+                with prefetch_lock:
+                    random_post = random.choice(prefetched_images[subreddit_to_use])
+                    prefetched_images[subreddit_to_use].remove(random_post)
+                    return format_dog_response(random_post, start_time)
+            
             tier_weights = {
                 1: 0.6,  
                 2: 0.3,  
@@ -363,6 +381,13 @@ def get_random_dog():
         
         logger.info(f"Selected subreddit: r/{subreddit_to_use}")
         
+        with prefetch_lock:
+            if subreddit_to_use in prefetched_images and prefetched_images[subreddit_to_use]:
+                random_post = random.choice(prefetched_images[subreddit_to_use])
+                prefetched_images[subreddit_to_use].remove(random_post)
+                logger.info(f"Using prefetched image from r/{subreddit_to_use}")
+                return format_dog_response(random_post, start_time)
+            
         image_posts = fetch_safe_dog_images_from_subreddit(subreddit_to_use, limit=30)
         
         if not image_posts:
