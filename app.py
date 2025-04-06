@@ -331,8 +331,6 @@ def prefetch_dog_images_batch():
     logger.info(f"Prefetch batch completed in {duration:.2f}s")
     return duration
 
-@app.route('/random-dog', methods=['GET'])
-@limiter.limit("100 per minute")
 def get_random_dog():
     start_time = time.time()
     g.start_time = start_time
@@ -359,7 +357,7 @@ def get_random_dog():
                 with prefetch_lock:
                     random_post = random.choice(prefetched_images[subreddit_to_use])
                     prefetched_images[subreddit_to_use].remove(random_post)
-                    return format_dog_response(random_post, start_time)
+                    return random_post
             
             tier_weights = {
                 1: 0.6,  
@@ -386,7 +384,7 @@ def get_random_dog():
                 random_post = random.choice(prefetched_images[subreddit_to_use])
                 prefetched_images[subreddit_to_use].remove(random_post)
                 logger.info(f"Using prefetched image from r/{subreddit_to_use}")
-                return format_dog_response(random_post, start_time)
+                return random_post
             
         image_posts = fetch_safe_dog_images_from_subreddit(subreddit_to_use, limit=30)
         
@@ -400,10 +398,7 @@ def get_random_dog():
                 image_posts = fetch_safe_dog_images_from_subreddit(alt_subreddit, limit=30)
         
         if not image_posts:
-            return jsonify({
-                "error": "No dog images found",
-                "status": 404
-            }), 404
+            raise ValueError("No dog images found")
         
         random_post = random.choice(image_posts)
         
@@ -417,14 +412,54 @@ def get_random_dog():
             if other_posts:
                 logger.info(f"Added {len(other_posts[:MIN_IMAGES_PER_SUBREDDIT])} new images to prefetch cache for r/{subreddit_to_use}")
         
-        return format_dog_response(random_post, start_time)
+        return random_post
     
     except Exception as e:
         logger.error(f"Error in get_random_dog: {e}")
         traceback.print_exc()
+        raise
+
+@app.route('/random-dog', methods=['GET'])
+@limiter.limit("100 per minute")
+def random_dog_endpoint():
+    try:
+        start_time = time.time()
+        
+        dog_data = get_random_dog()
+        
+        user_agent = request.headers.get('User-Agent', '').lower()
+        accept_header = request.headers.get('Accept', '').lower()
+        
+        is_discord_request = (
+            'discord' in user_agent or 
+            'discordbot' in user_agent or 
+            'preview' in accept_header
+        )
+        
+        if is_discord_request:
+            image_url = dog_data.url
+            html_response = f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta property="og:image" content="{image_url}">
+                <meta property="og:type" content="image">
+                <meta name="twitter:card" content="summary_large_image">
+                <meta name="twitter:image" content="{image_url}">
+            </head>
+            <body>
+                <img src="{image_url}" style="max-width: 100%; height: auto;">
+            </body>
+            </html>
+            '''
+            return html_response, 200, {'Content-Type': 'text/html'}
+        
+        return format_dog_response(dog_data, start_time)
+    
+    except Exception as e:
+        logger.error(f"Error generating random dog: {e}")
         return jsonify({
-            "error": "Internal server error",
-            "details": str(e),
+            "error": "Failed to generate random dog image",
             "status": 500
         }), 500
 
