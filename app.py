@@ -433,7 +433,13 @@ def random_dog_endpoint():
         is_discord_request = (
             'discord' in user_agent or 
             'discordbot' in user_agent or 
+            'discordapp.com' in user_agent or 
             'preview' in accept_header
+        )
+        
+        is_browser_request = any(
+            browser in user_agent for browser in 
+            ['mozilla', 'chrome', 'safari', 'firefox', 'opera', 'edge', 'webkit']
         )
         
         if is_discord_request:
@@ -454,7 +460,10 @@ def random_dog_endpoint():
             '''
             return html_response, 200, {'Content-Type': 'text/html'}
         
-        return format_dog_response(dog_data, start_time)
+        if is_browser_request:
+            return format_dog_response(dog_data, start_time)
+        
+        return dog_data.url, 200, {'Content-Type': 'text/plain'}
     
     except Exception as e:
         logger.error(f"Error generating random dog: {e}")
