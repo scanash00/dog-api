@@ -444,21 +444,18 @@ def random_dog_endpoint():
         
         if is_discord_request:
             image_url = dog_data.url
-            html_response = f'''
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta property="og:image" content="{image_url}">
-                <meta property="og:type" content="image">
-                <meta name="twitter:card" content="summary_large_image">
-                <meta name="twitter:image" content="{image_url}">
-            </head>
-            <body>
-                <img src="{image_url}" style="max-width: 100%; height: auto;">
-            </body>
-            </html>
-            '''
-            return html_response, 200, {'Content-Type': 'text/html'}
+            try:
+                image_response = session.get(image_url, timeout=10)
+                image_response.raise_for_status()
+                
+                return (
+                    image_response.content, 
+                    200, 
+                    {'Content-Type': image_response.headers.get('Content-Type', 'image/jpeg')}
+                )
+            except Exception as e:
+                logger.error(f"Error fetching image for Discord: {e}")
+                return "Error fetching image", 500
         
         if is_browser_request:
             return format_dog_response(dog_data, start_time)
