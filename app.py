@@ -434,7 +434,8 @@ def random_dog_endpoint():
             'discord' in user_agent or 
             'discordbot' in user_agent or 
             'discordapp.com' in user_agent or 
-            'preview' in accept_header
+            'preview' in accept_header or
+            request.args.get('discord', '').lower() == 'true'
         )
         
         is_browser_request = any(
@@ -443,19 +444,7 @@ def random_dog_endpoint():
         )
         
         if is_discord_request:
-            image_url = dog_data.url
-            try:
-                image_response = session.get(image_url, timeout=10)
-                image_response.raise_for_status()
-                
-                return (
-                    image_response.content, 
-                    200, 
-                    {'Content-Type': image_response.headers.get('Content-Type', 'image/jpeg')}
-                )
-            except Exception as e:
-                logger.error(f"Error fetching image for Discord: {e}")
-                return "Error fetching image", 500
+            return dog_data.url, 200, {'Content-Type': 'image/jpeg'}
         
         if is_browser_request:
             return format_dog_response(dog_data, start_time)
