@@ -443,7 +443,14 @@ def random_dog_endpoint():
         )
         
         if is_discord_request:
-            return dog_data.url, 200, {'Content-Type': 'text/plain'}
+            headers = {
+                'Content-Type': 'text/plain',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'X-Timestamp': str(time.time())
+            }
+            return dog_data.url, 200, headers
         
         if is_browser_request:
             return format_dog_response(dog_data, start_time)
