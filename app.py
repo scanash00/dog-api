@@ -443,14 +443,22 @@ def random_dog_endpoint():
         )
         
         if is_discord_request:
-            headers = {
-                'Content-Type': 'text/plain',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-                'X-Timestamp': str(time.time())
-            }
-            return dog_data.url, 200, headers
+            image_url = dog_data.url
+            html_response = f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta property="og:image" content="{image_url}">
+                <meta property="og:type" content="image">
+                <meta name="twitter:card" content="summary_large_image">
+                <meta name="twitter:image" content="{image_url}">
+            </head>
+            <body>
+                <img src="{image_url}" style="max-width: 100%; height: auto;">
+            </body>
+            </html>
+            '''
+            return html_response, 200, {'Content-Type': 'text/html'}
         
         if is_browser_request:
             return format_dog_response(dog_data, start_time)
