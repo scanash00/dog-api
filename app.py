@@ -419,6 +419,29 @@ def get_random_dog():
         traceback.print_exc()
         raise
 
+def is_discord_image_within_size_limit(url, max_size_mb=10):
+    try:
+        response = session.head(url, timeout=5)
+        response.raise_for_status()
+        
+        content_length = response.headers.get('Content-Length')
+        if content_length:
+            size_mb = int(content_length) / (1024 * 1024)
+            return size_mb <= max_size_mb
+        
+        response = session.get(url, stream=True, timeout=5)
+        response.raise_for_status()
+        
+        size = 0
+        for chunk in response.iter_content(chunk_size=1024):
+            size += len(chunk)
+            if size > 10 * 1024 * 1024:
+                return False
+        return True
+    except Exception as e:
+        logger.warning(f"Error checking Discord image size for {url}: {e}")
+        return False
+
 @app.route('/random-dog', methods=['GET'])
 @limiter.limit("100 per minute")
 def random_dog_endpoint():
@@ -444,7 +467,19 @@ def random_dog_endpoint():
         )
         
         if is_discord_request:
-            return dog_data.url, 200, {'Content-Type': 'image/jpeg'}
+            # Specifically check image size for Discord
+            if is_discord_image_within_size_limit(dog_data.url):
+                return dog_data.url, 200, {'Content-Type': 'image/jpeg'}
+            else:
+                # If image is too large, try to get another image
+                for _ in range(5):  # Try up to 5 times
+                    dog_data = get_random_dog()
+                    if is_discord_image_within_size_limit(dog_data.url):
+                        return dog_data.url, 200, {'Content-Type': 'image/jpeg'}
+                
+                # If no suitable image found
+                logger.error("Could not find an image under 10MB for Discord")
+                return "No suitable image found", 500
         
         if is_browser_request:
             return format_dog_response(dog_data, start_time)
