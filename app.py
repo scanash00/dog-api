@@ -256,13 +256,25 @@ def is_safe_content(text):
     
     return True
 
+def get_content_type(url):
+    if url.endswith('.jpg') or url.endswith('.jpeg'):
+        return 'image/jpeg'
+    elif url.endswith('.png'):
+        return 'image/png'
+    elif url.endswith('.gif'):
+        return 'image/gif'
+    elif url.endswith('.webp'):
+        return 'image/webp'
+    else:
+        return 'image/jpeg'  
+
 def fetch_safe_dog_images_from_subreddit(subreddit_name, limit=20):
     try:
         subreddit = reddit.subreddit(subreddit_name)
         image_posts = []
         
         for post in subreddit.hot(limit=limit):
-            if post.url.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+            if post.url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
                 if is_safe_content(post.title):
                     post.url = clean_url(post.url)
                     image_posts.append(post)
@@ -442,6 +454,28 @@ def is_discord_image_within_size_limit(url, max_size_mb=10):
         logger.warning(f"Error checking Discord image size for {url}: {e}")
         return False
 
+def get_discord_image_response(url):
+    try:
+        response = session.get(url, stream=True, timeout=10)
+        response.raise_for_status()
+        
+        if not response.headers.get('Content-Type', '').startswith('image/'):
+            raise ValueError("URL does not point to an image")
+            
+        return (
+            response.content,
+            200,
+            {
+                'Content-Type': response.headers['Content-Type'],
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error fetching image for Discord: {e}")
+        return f"Error: {str(e)}", 500
+
 @app.route('/random-dog', methods=['GET'])
 @limiter.limit("100 per minute")
 def random_dog_endpoint():
@@ -467,20 +501,8 @@ def random_dog_endpoint():
         )
         
         if is_discord_request:
-            # Specifically check image size for Discord
-            if is_discord_image_within_size_limit(dog_data.url):
-                return dog_data.url, 200, {'Content-Type': 'image/jpeg'}
-            else:
-                # If image is too large, try to get another image
-                for _ in range(5):  # Try up to 5 times
-                    dog_data = get_random_dog()
-                    if is_discord_image_within_size_limit(dog_data.url):
-                        return dog_data.url, 200, {'Content-Type': 'image/jpeg'}
-                
-                # If no suitable image found
-                logger.error("Could not find an image under 10MB for Discord")
-                return "No suitable image found", 500
-        
+            return get_discord_image_response(dog_data.url)
+            
         if is_browser_request:
             return format_dog_response(dog_data, start_time)
         
